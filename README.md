@@ -37,7 +37,7 @@ This project started as a working prototype with API keys in source code, synchr
 
 ```mermaid
 graph TD
-    CLI[Typer CLI<br/>Composition Root] --> Orch[PipelineOrchestrator]
+    CLI[Typer CLI\nComposition Root] --> Orch[PipelineOrchestrator]
     Orch --> AnalyzeUC[AnalyzeScriptUseCase]
     Orch --> DownloadUC[DownloadClipsUseCase]
     Orch --> AssembleUC[AssembleVideoUseCase]
@@ -51,17 +51,17 @@ graph TD
 
     LLMPort --> Groq[GroqClient]
     LLMPort --> OpenAI[OpenAIClient]
-    LLMPort --> Fallback[FallbackClient<br/>(Groq to OpenAI)]
+    LLMPort --> Fallback[FallbackClient\n(Groq to OpenAI)]
 
     VideoSearchPort --> Pexels[PexelsSearcher]
 
     DownloadUC --> DownloaderPort[VideoDownloaderPort Protocol]
-    DownloaderPort --> AsyncDL[AsyncDownloader<br/>Semaphore + gather]
+    DownloaderPort --> AsyncDL[AsyncDownloader\nSemaphore + gather]
 
     AssembleUC --> AssemblerPort[VideoAssemblerPort Protocol]
     AssembleUC --> AudioPort[AudioProviderPort Protocol]
-    AssemblerPort --> FFmpeg[FFmpegAssembler<br/>concat demuxer]
-    AudioPort --> FFprobe[LocalAudioProvider<br/>ffprobe JSON]
+    AssemblerPort --> FFmpeg[FFmpegAssembler\nconcat demuxer]
+    AudioPort --> FFprobe[LocalAudioProvider\nffprobe JSON]
 
     Settings[Settings pydantic] -.configures.-> CLI
     Logger[structlog] -.observes.-> Orch
