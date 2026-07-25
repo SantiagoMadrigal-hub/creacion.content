@@ -1,0 +1,73 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment variables (SECRETS - never commit)
+.env
+.env.local
+.env.*.local
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+*.whl
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Project outputs
+videos/
+clips_descargados/
+audios/*.mp3
+*.mp4
+*.mov
+*.avi
+*.mkv
+video_final_definitivo.mp4
+
+# Checkpoints (generated JSON - optional to ignore if you want to track them)
+escenas_con_videos.json
+escenas.json
+
+# Logs
+*.log
+logs/
+
+# Test / coverage artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Docker
+.docker/
+
+# uv
+uv.lock
+
+# Local development overrides
+.override.toml
+local.toml
+
+# Temporary files
+tmp/
+temp/
+*.tmp
