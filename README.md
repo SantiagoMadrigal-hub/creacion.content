@@ -51,7 +51,7 @@ graph TD
 
     LLMPort --> Groq[GroqClient]
     LLMPort --> OpenAI[OpenAIClient]
-    LLMPort --> Fallback[FallbackClient<br/>(Groq → OpenAI)]
+    LLMPort --> Fallback[FallbackClient<br/>(Groq to OpenAI)]
 
     VideoSearchPort --> Pexels[PexelsSearcher]
 
@@ -69,7 +69,7 @@ graph TD
 
 ### Key Design Decisions
 
-- **Domain owns zero external dependencies** — entities, ports (`Protocol`), services, and exceptions live in `domain/`. Swapping Groq→Anthropic or Pexels→Pixabay requires only new infrastructure adapters.
+- **Domain owns zero external dependencies** — entities, ports (`Protocol`), services, and exceptions live in `domain/`. Swapping Groq to Anthropic or Pexels to Pixabay requires only new infrastructure adapters.
 - **Single retry policy** — SDK internal retries disabled; all transient failures (LLM, Pexels, downloads) use `tenacity` with exponential backoff + jitter, configured via `Settings`.
 - **Fallback as a first-class port** — `FallbackClient` implements `LLMPort` by composing two other `LLMPort`s. The domain sees one LLM; ordering is an infrastructure concern.
 - **Checkpoint compatibility** — `Scene.to_dict() / Scene.from_dict()` use the exact same JSON schema as the original prototype, so existing checkpoints remain valid resumption points (no re-spending LLM/Pexels budget).
