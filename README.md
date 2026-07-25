@@ -51,7 +51,7 @@ graph TD
 
     LLMPort --> Groq[GroqClient]
     LLMPort --> OpenAI[OpenAIClient]
-    LLMPort --> Fallback[FallbackClient\n(Groq to OpenAI)]
+    LLMPort --> Fallback[FallbackClient\nGroq to OpenAI]
 
     VideoSearchPort --> Pexels[PexelsSearcher]
 
