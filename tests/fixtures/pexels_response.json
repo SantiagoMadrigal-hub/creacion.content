@@ -1,0 +1,44 @@
+{
+  "page": 1,
+  "per_page": 10,
+  "total_results": 2,
+  "next_page": "https://api.pexels.com/videos/search?page=2&per_page=10&query=old+book",
+  "videos": [
+    {
+      "id": 1234567,
+      "url": "https://www.pexels.com/video/an-old-book-1234567/",
+      "duration": 12,
+      "tags": ["old book", "vintage", "library"],
+      "video_files": [
+        {
+          "link": "https://videos.pexels.com/video-files/1234567/1234567-hd_640_360_25fps.mp4",
+          "width": 640,
+          "height": 360
+        },
+        {
+          "link": "https://videos.pexels.com/video-files/1234567/1234567-hd_1920_1080_25fps.mp4",
+          "width": 1920,
+          "height": 1080
+        },
+        {
+          "link": "https://videos.pexels.com/video-files/1234567/1234567-hd_1280_720_25fps.mp4",
+          "width": 1280,
+          "height": 720
+        }
+      ]
+    },
+    {
+      "id": 7654321,
+      "url": "https://www.pexels.com/video/mysterious-person-7654321/",
+      "duration": 8,
+      "tags": ["person", "mystery", "thinking"],
+      "video_files": [
+        {
+          "link": "https://videos.pexels.com/video-files/7654321/7654321-hd_1920_1080_30fps.mp4",
+          "width": 1920,
+          "height": 1080
+        }
+      ]
+    }
+  ]
+}

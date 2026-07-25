@@ -1,0 +1,16 @@
+# Uso:
+#   docker compose run --rm lavox run --guion guion.txt
+#   docker compose run --rm lavox analyze --guion guion.txt --dry-run
+services:
+  lavox:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    env_file:
+      - .env
+    volumes:
+      - ./guion.txt:/home/lavox/workspace/guion.txt:ro
+      - ./audios:/home/lavox/workspace/audios:ro
+      - ./videos:/home/lavox/workspace/videos
+      - ./output:/home/lavox/workspace/output
+    command: ["--help"]

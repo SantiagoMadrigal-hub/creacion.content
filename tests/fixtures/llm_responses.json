@@ -1,0 +1,8 @@
+{
+  "queries_limpio": "[\"old book mysterious letters\", \"surprised person thinking\", \"library ancient knowledge\"]",
+  "queries_con_markdown": "Aquí tienes las queries:\n```json\n[\"hamburger german immigrants\", \"old kitchen cooking\", \"Hamburg city map\"]\n```",
+  "analisis_escena": "{\"tema_principal\": \"origen de la palabra whisky\", \"emocion_tono\": \"intriga\", \"tipo_escena\": \"hook_inicio\", \"elementos_clave\": [\"old bottle\", \"ancient manuscript\", \"monastery\", \"distillery\"]}",
+  "evaluacion_relevancia": "[{\"indice\": 0, \"relevancia\": 85, \"justificacion\": \"Tags alineados con el tema de libros antiguos\"}, {\"indice\": 1, \"relevancia\": 40, \"justificacion\": \"Relación débil con el tema\"}]",
+  "elementos_concretos": "[\"old manuscript\", \"monk writing\", \"ancient monastery\", \"glass bottle\"]",
+  "respuesta_no_json": "Lo siento, no puedo generar una respuesta en este momento."
+}

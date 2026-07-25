@@ -1,0 +1,158 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lavox"
+version = "0.1.0"
+description = "Pipeline automatizado de creación de video: guion -> análisis LLM -> curación semántica en Pexels -> descarga -> ensamblaje FFmpeg -> video final."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "LAVOX" }]
+keywords = ["video", "pipeline", "llm", "pexels", "ffmpeg", "clean-architecture"]
+classifiers = [
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Private :: Do Not Upload",
+]
+dependencies = [
+    "pydantic>=2.9,<3",
+    "pydantic-settings>=2.5,<3",
+    "httpx>=0.27,<1",
+    "tenacity>=9.0,<10",
+    "structlog>=24.4,<27",
+    "typer>=0.12,<1",
+    "rich>=13.7,<16",
+    "groq>=0.9,<2",
+    "openai>=1.30,<3",
+]
+
+[project.urls]
+Repository = "https://example.invalid/lavox"
+
+[project.scripts]
+lavox-pipeline = "lavox.cli.main:app"
+lavox-analyze = "lavox.cli.main:analyze_entrypoint"
+lavox-download = "lavox.cli.main:download_entrypoint"
+lavox-assemble = "lavox.cli.main:assemble_entrypoint"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15,<1",
+    "mypy>=2.0,<3",
+    "pytest>=9.0,<10",
+    "pytest-asyncio>=1.0,<2",
+    "pytest-cov>=7.0,<8",
+    "pytest-mock>=3.14,<4",
+    "respx>=0.22,<1",
+    "pre-commit>=4.0,<5",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lavox"]
+
+# ---------------------------------------------------------------------------
+# Ruff: lint + format
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",    # pycodestyle
+    "F",         # pyflakes
+    "I",         # isort
+    "N",         # pep8-naming
+    "UP",        # pyupgrade
+    "B",         # flake8-bugbear
+    "C4",        # flake8-comprehensions
+    "SIM",       # flake8-simplify
+    "TID",       # flake8-tidy-imports (absolute imports)
+    "ASYNC",     # flake8-async
+    "RUF",       # ruff-specific
+    "D",         # pydocstyle (Google-style docstrings)
+]
+ignore = [
+    "D100", "D104", "D107",  # falta docstring en módulo/paquete/__init__
+    "D203", "D213",          # conflictos con D211/D212 (blank-line-before-class)
+    # E/S local (checkpoints JSON pequeños, mkdir, exists) permanece síncrona
+    # dentro de funciones async deliberadamente: son operaciones de disco
+    # locales y rápidas: el costo de despachar cada una a un hilo supera el
+    # beneficio. Las operaciones realmente costosas (HTTP, subprocess de
+    # FFmpeg) sí son async en toda la base de código.
+    "ASYNC240",
+    # Se prefiere `timeout: float` como parámetro explícito y configurable
+    # (proviene de Settings) en vez de exigir que cada call site envuelva la
+    # llamada con `asyncio.timeout(...)`.
+    "ASYNC109",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["D", "S101"]
+"src/lavox/cli/main.py" = ["B008"]  # typer usa llamadas a función como valores por defecto de parámetros
+
+[tool.ruff.lint.isort]
+known-first-party = ["lavox"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ---------------------------------------------------------------------------
+# Mypy: tipado estricto
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unreachable = true
+show_error_codes = true
+plugins = ["pydantic.mypy"]
+mypy_path = "src"
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = ["groq.*", "openai.*"]
+ignore_missing_imports = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+# ---------------------------------------------------------------------------
+# Pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+filterwarnings = ["error::DeprecationWarning"]
+markers = [
+    "slow: tests que invocan binarios reales de ffmpeg/ffprobe y tardan más en correr",
+]
+
+# ---------------------------------------------------------------------------
+# Coverage
+# ---------------------------------------------------------------------------
+[tool.coverage.run]
+source = ["src/lavox"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 85
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "\\.\\.\\.",
+    "raise NotImplementedError",
+]
