@@ -62,6 +62,9 @@ graph TD
     AssembleUC --> AudioPort[AudioProviderPort Protocol]
     AssemblerPort --> FFmpeg[FFmpegAssembler<br/>concat demuxer]
     AudioPort --> FFprobe[LocalAudioProvider<br/>ffprobe JSON]
+
+    Settings[Settings pydantic] -.configures.-> CLI
+    Logger[structlog] -.observes.-> Orch
 ```
 
 ### Key Design Decisions
@@ -69,189 +72,140 @@ graph TD
 - **Domain owns zero external dependencies** — entities, ports (`Protocol`), services, and exceptions live in `domain/`. Swapping Groq→Anthropic or Pexels→Pixabay requires only new infrastructure adapters.
 - **Single retry policy** — SDK internal retries disabled; all transient failures (LLM, Pexels, downloads) use `tenacity` with exponential backoff + jitter, configured via `Settings`.
 - **Fallback as a first-class port** — `FallbackClient` implements `LLMPort` by composing two other `LLMPort`s. The domain sees one LLM; ordering is an infrastructure concern.
-- **Checkpoint compatibility** — `Scene.to_dict() / from_dict()` serialize to the exact JSON schema the original prototype produced. Existing checkpoints resume without re-spending LLM/Pexels quota.
-- **`ffprobe` over `moviepy`** — Removed a heavy dependency; duration extraction via `ffprobe -print_format json -show_format` is faster and more reliable.
-- **Bounded concurrency** — `AsyncDownloader.download_many` uses `asyncio.Semaphore(max_concurrency)` + `gather(return_exceptions=True)` so one failure never cancels the rest.
+- **Checkpoint compatibility** — `Scene.to_dict() / Scene.from_dict()` use the exact same JSON schema as the original prototype, so existing checkpoints remain valid resumption points (no re-spending LLM/Pexels budget).
+- **`ffprobe` replaces `moviepy`** — The original used `moviepy` only for audio duration and `ffmpeg` binary discovery. Both are now resolved via `ffprobe -show_format -print_format json`, eliminating a heavy dependency and avoiding fragile text parsing.
+- **Concurrency control** — `AsyncDownloader.download_many` uses `asyncio.Semaphore` + `asyncio.gather(..., return_exceptions=True)` so one failure never cancels the rest.
 
 ---
 
-## 🛠️ Tech Stack
+## 📋 Requirements
 
-| Layer | Choices |
-|-------|---------|
-| **Language** | Python 3.11+ (modern `asyncio`, `Self`, `TypedDict`, `match`) |
-| **Async HTTP** | `httpx.AsyncClient` (connection pooling, timeouts, redirects) |
-| **LLM Providers** | `groq` SDK, `openai` SDK — wrapped behind `LLMPort` |
-| **Stock Video** | Pexels Video API (`httpx` + `pydantic` response models) |
-| **Media Processing** | `ffmpeg` / `ffprobe` via `asyncio.subprocess` |
-| **Config** | `pydantic-settings` (env prefix `LAVOX_`, nested `__`, `SecretStr`) |
-| **Logging** | `structlog` (console dev / JSON prod) + `contextvars` correlation IDs |
-| **CLI** | `Typer` + `Rich` (tables, progress bars, semantic exit codes) |
-| **Testing** | `pytest` + `pytest-asyncio` + `respx` (HTTP mock) + `pytest-mock` |
-| **Quality Gates** | `ruff` (lint+format), `mypy --strict`, `pytest --cov-fail-under=85` |
-| **Packaging** | `pyproject.toml` (hatchling), `uv` lockfile, entry points |
-| **CI/CD Ready** | `pre-commit` (ruff, mypy, secret scan), `Dockerfile` multi-stage |
+- Python **3.11+**
+- [`uv`](https://docs.astral.sh/uv/) (package/environment manager)
+- `ffmpeg` and `ffprobe` in `PATH` (or configurable via `LAVOX_FFMPEG__*`)
+- API keys for **Groq** and/or **OpenAI**, and **Pexels**
 
 ---
 
-## 📁 Project Structure
-
-```
-src/lavox/
-├── cli/                    # Typer app — composition root
-│   └── main.py             # lavox-pipeline, lavox-analyze, lavox-download, lavox-assemble
-├── domain/                 # Pure Python, zero external deps
-│   ├── entities/           # Scene, Clip, Script (dataclasses + serialization)
-│   ├── ports/              # Protocols: LLMPort, VideoSearchPort, VideoDownloaderPort, VideoAssemblerPort, AudioProviderPort
-│   ├── services/           # SceneCurator (semantic curation logic)
-│   └── exceptions.py       # LavoxError → ConfigError, LLMError, PexelsError, DownloadError, AssemblyError, PartialPipelineError
-├── application/            # Use cases + orchestrator
-│   ├── use_cases/          # AnalyzeScript, DownloadClips, AssembleVideo
-│   └── pipeline/           # PipelineOrchestrator (runs all three)
-├── infrastructure/         # Concrete adapters
-│   ├── llm/                # GroqClient, OpenAIClient, FallbackClient, _parsing.py (tolerant JSON extraction)
-│   ├── video_search/       # PexelsSearcher (pydantic models + tenacity)
-│   ├── download/           # AsyncDownloader (semaphore, resume, validation)
-│   ├── video/              # FFmpegAssembler (letterbox, loop, concat demuxer, audio mux)
-│   ├── audio/              # LocalAudioProvider (ffprobe JSON)
-│   ├── _retry.py           # Shared tenacity policy (429/5xx + transport errors)
-│   └── _ffprobe.py         # Shared ffprobe duration extraction
-├── settings.py             # Pydantic Settings (validated, SecretStr keys)
-└── logging_config.py       # structlog setup + correlation_id binding
-```
-
----
-
-## ⚡ Quick Start
+## ⚡ Installation
 
 ```bash
-# 1. Clone & install (uv is ~10x faster than pip)
-git clone https://github.com/SantiagoMadrigal-hub/creacion.content.git
-cd creacion.content
-uv sync --all-extras        # creates .venv, installs runtime + dev deps
+uv sync                       # installs dependencies + dev tools in .venv
+cp .env.example .env          # fill in your own keys
+```
 
-# 2. Configure secrets (never committed)
-cp .env.example .env
-# Edit .env with your keys:
-# LAVOX_LLM__GROQ_API_KEY=gsk_...
-# LAVOX_LLM__OPENAI_API_KEY=sk-...   # optional fallback
-# LAVOX_PEXELS__API_KEY=...
+---
 
-# 3. Add narration audio
-mkdir -p audios
-# place your file at audios/vozenoff_completa.mp3 (or set LAVOX_AUDIO_PATH)
+## ⚙️ Configuration
 
-# 4. Run the pipeline
+All configuration lives in `src/lavox/settings.py` (`pydantic-settings`), with precedence:
+
+```
+defaults  →  .env  →  real env vars  →  CLI flags
+```
+
+Variables use the `LAVOX_` prefix, and `__` (double underscore) for nesting:
+- `LAVOX_LLM__GROQ_API_KEY`
+- `LAVOX_PIPELINE__RELEVANCE_THRESHOLD`
+- etc.
+
+See [`.env.example`](.env.example) for the complete, commented list.
+
+API keys are exposed as `pydantic.SecretStr` — they never appear in `repr()`, logs, or tracebacks.
+
+---
+
+## 🚀 Usage
+
+```bash
+# Full pipeline
 uv run lavox-pipeline run --guion guion.txt
-# Output: video_final_definitivo.mp4
-```
 
-### Dry-run (validate config without calling APIs)
+# Individual phases
+uv run lavox-pipeline analyze --guion guion.txt
+uv run lavox-pipeline download --workers 8
+uv run lavox-pipeline assemble --audio audios/narracion.mp3
 
-```bash
+# Validate config & show plan without calling external providers
 uv run lavox-pipeline run --guion guion.txt --dry-run
+
+# Standalone entry points (installed via pyproject.toml)
+uv run lavox-analyze --guion guion.txt
+uv run lavox-download --workers 8
+uv run lavox-assemble --audio audios/narracion.mp3
 ```
 
-### Step-by-step (useful for debugging)
+### Main Flags
 
-```bash
-uv run lavox-pipeline analyze --guion guion.txt    # → escenas_con_videos.json
-uv run lavox-pipeline download                      # → videos/escena_*.mp4
-uv run lavox-pipeline assemble                      # → video_final_definitivo.mp4
-```
+| Flag | Commands | Description |
+|------|----------|-------------|
+| `--guion` | `analyze`, `run` | Input script path |
+| `--output` | all | Output path (checkpoint, clips dir, or final video) |
+| `--workers` | `download`, `run` | Max concurrent downloads |
+| `--max-relevance` | `analyze`, `run` | Relevance threshold (0–100) to accept a clip |
+| `--resume` / `--no-resume` | `analyze`, `run` | Resume from existing checkpoint (default: yes) |
+| `--dry-run` | all | Validate config/inputs without external calls |
 
----
-
-## 🧪 Development Workflow
-
-```bash
-# Install dev tools + pre-commit hooks
-uv sync --group dev
-uv run pre-commit install
-
-# Quality gates (must pass before PR)
-uv run ruff check . && uv run ruff format --check .
-uv run mypy --strict src
-uv run pytest --cov=src --cov-fail-under=85
-
-# Build distributable
-uv build
-```
-
-**Test breakdown:** 124 tests (unit + integration), mocked external APIs via `respx`, fixtures for Pexels responses, LLM outputs, and sample scripts.
-
----
-
-## 🐳 Docker (Production-Ready)
-
-```bash
-# Build image (multi-stage, non-root, ffmpeg included)
-docker build -t lavox -f docker/Dockerfile .
-
-# Run with local files mounted
-docker run --rm \
-  --env-file .env \
-  -v $(pwd)/guion.txt:/home/lavox/workspace/guion.txt:ro \
-  -v $(pwd)/audios:/home/lavox/workspace/audios:ro \
-  -v $(pwd)/videos:/home/lavox/workspace/videos \
-  -v $(pwd)/output:/home/lavox/workspace/output \
-  lavox run --guion guion.txt --output output/video_final.mp4
-```
-
----
-
-## 🔐 Security Posture
-
-- **Zero secrets in source** — `.env` in `.gitignore`, `SecretStr` prevents accidental logging.
-- **Pre-commit secret scanner** — blocks commits matching `gsk_*` or `sk-*` patterns.
-- **GitHub Push Protection** — repo-level secret scanning enabled.
-- **Dependency scanning** — `uv` lockfile + `pip-audit` in CI (add to workflow).
-
-> **Note**: The original prototype had 3 live API keys hardcoded. They were rotated before this repo was published. If you forked the old version, **rotate your keys immediately**.
-
----
-
-## 📊 Exit Codes (Automation-Friendly)
+### Exit Codes
 
 | Code | Meaning |
 |------|---------|
 | `0` | Full success |
-| `1` | Config error (missing file, key, etc.) |
-| `2` | LLM provider failure (non-retryable) |
-| `3` | Download catastrophic (zero successful downloads) |
-| `4` | FFmpeg assembly failure |
-| `5` | **Partial success** — video produced but degraded (some scenes missing clips / some downloads failed) |
+| `1` | Config error (missing file, API key, etc.) |
+| `2` | LLM provider error |
+| `3` | Download error (catastrophic: no downloads succeeded) |
+| `4` | Assembly error (FFmpeg) |
+| `5` | Partial success — video produced but degraded (some scenes without clip, or individual download failures) |
 
 ---
 
-## 🎓 What This Demonstrates to Employers
+## 🛠️ Development
 
-| Competency | Evidence in This Repo |
-|------------|----------------------|
-| **System Design** | Clean Architecture, dependency inversion via `Protocol`, composition root pattern |
-| **Async Python** | `asyncio`/`httpx`/`tenacity` patterns, bounded concurrency, proper exception handling |
-| **API Integration** | Multiple providers (Groq, OpenAI, Pexels) with fallback, retry, timeout policies |
-| **Media Processing** | Direct FFmpeg orchestration (letterbox, loop-trim, concat demuxer, audio mux) |
-| **Testing Discipline** | 124 tests, mocks at port boundaries, integration test with full pipeline mock |
-| **Type Safety** | `mypy --strict` clean, `Protocol`, `TypedDict`, generics, no `Any` leakage |
-| **Developer Experience** | `Typer`/`Rich` CLI, `--dry-run`, semantic exits, progress bars, structured logging |
-| **Packaging & Tooling** | `pyproject.toml`, `uv`, `ruff`, `pre-commit`, `Dockerfile`, `hatchling` build |
-| **Security Awareness** | `SecretStr`, gitignore, pre-commit secret scan, push protection, key rotation docs |
+```bash
+uv sync --group dev
+uv run ruff check . && uv run ruff format --check .
+uv run mypy --strict src
+uv run pytest --cov=src --cov-fail-under=85
+uv build
+uv run pre-commit install   # optional: runs hooks on every commit
+```
 
 ---
 
-## 📝 License
+## 🔧 Troubleshooting
 
-MIT — see [`LICENSE`](LICENSE).
+**`ConfigError: No hay ninguna API key de LLM configurada`**  
+Missing `LAVOX_LLM__GROQ_API_KEY` and/or `LAVOX_LLM__OPENAI_API_KEY` in `.env`. At least one required.
+
+**`AssemblyError: No se encontró el ejecutable 'ffmpeg'`**  
+`ffmpeg`/`ffprobe` not in `PATH`. Install (`apt install ffmpeg` on Debian/Ubuntu) or set `LAVOX_FFMPEG__BINARY` / `LAVOX_FFMPEG__PROBE_BINARY` to absolute paths.
+
+**Pipeline restarts from scratch instead of resuming**  
+Ensure `--resume` is active (default) and `LAVOX_SCENES_OUTPUT_PATH` points to the same checkpoint used previously.
+
+**Partial output (exit code 5) with many scenes missing clips**  
+Lower `--max-relevance` to a more permissive value, or verify `LAVOX_PIPELINE__CONTEXTO_NARRATIVO` accurately describes your script's topic — the LLM uses this to generate `elementos_clave` for search queries.
+
+**Constant Pexels rate limits (429)**  
+Reduce `LAVOX_PIPELINE__MAX_DOWNLOAD_CONCURRENCY` and/or `LAVOX_PEXELS__PER_PAGE`; Pexels enforces per-minute limits based on your plan.
 
 ---
 
-## 👤 Author
+## 🤝 Contributing
 
-**Santiago Madrigal**  
-Full-Stack / Backend Developer — Python, TypeScript, Cloud, Clean Architecture  
-[GitHub](https://github.com/SantiagoMadrigal-hub) • [LinkedIn](https://linkedin.com/in/santiago-madrigal)
+1. `uv sync --group dev && uv run pre-commit install`
+2. Before PR: `ruff check . && ruff format --check . && mypy --strict src && pytest --cov=src --cov-fail-under=85`
+3. Follow Clean Architecture: domain imports no infrastructure; use cases depend only on ports (`Protocol`), never concrete implementations.
+4. New or modified LLM prompts belong in the layer that already owns them (`SceneCurator` or `AnalyzeScriptUseCase`), not in infrastructure.
 
 ---
 
-> *This project is part of my portfolio demonstrating production-grade Python engineering. Feedback and questions welcome via Issues.*
+## 📜 Changelog
+
+See [`CHANGELOG.md`](CHANGELOG.md).
+
+---
+
+## 📄 License
+
+MIT.
